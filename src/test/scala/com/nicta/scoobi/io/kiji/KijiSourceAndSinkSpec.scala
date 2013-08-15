@@ -25,7 +25,7 @@ import scalaz.syntax.monad._
 import org.specs2.specification.Grouped
 import org.kiji.schema._
 import org.kiji.schema.KijiDataRequestBuilder.ColumnsDef
-import org.kiji.schema.filter.ColumnValueEqualsRowFilter
+import org.kiji.schema.filter.{ColumnValueEqualsRowFilter, KijiRowFilter}
 import shapeless._
 import com.nicta.scoobi.testing.TestFiles
 import org.specs2.matcher._
@@ -45,6 +45,8 @@ Sources
     + for a single column
     + for several columns
     + using a row filter
+    + run two requests against the same table
+    + run two requests against the same table twiece
 
 Sinks
 =====
@@ -108,6 +110,98 @@ Sinks
         }
       }
     }
+
+    eg := { implicit sc: SC =>
+      onTable("table", "twoColumns.json") {
+        put("1", "family", "column1", "true")  >>
+        put("2", "family", "column1", "false") >>
+        put("3", "family", "column1", "true")  >>
+        put("4", "family", "column1", "false")  >>
+        put("1", "family", "column2", 1) >>
+        put("2", "family", "column2", 2) >>
+        put("3", "family", "column2", 3) >>
+        put("4", "family", "column2", 4) >>
+        get(true must_== true)
+      }
+
+      val uri = KijiURI.newBuilder(sc.configuration.get(KIJI_TEST_URI)).build
+      val request: KijiDataRequest = KijiDataRequest.builder.
+        addColumns(ColumnsDef.create.add("family", "column1").add("family", "column2")).build
+
+      val kiji1: Kiji = Kiji.Factory.open(uri)
+      val table1: KijiTable = kiji1.openTable("table")
+
+      try {
+        val filterString1 = new DecodedCell[String](Schema.create(Schema.Type.STRING), "false")
+        val filter1 = new ColumnValueEqualsRowFilter("family", "column1", filterString1)
+        val data1: DList[EntityRow] = fromRequest(table1, request, filter=Some(filter1))
+        val values1 = data1.map(_.family[String :: Int :: HNil]("column1", "column2"))
+        values1.run.map(_.tupled._1).sorted must_== Vector("false", "false").sorted
+      } finally {
+        table1.release()
+        kiji1.release()
+      }
+
+      val kiji2: Kiji = Kiji.Factory.open(uri)
+      val table2: KijiTable = kiji2.openTable("table")
+
+      try {
+        val filterString2 = new DecodedCell[String](Schema.create(Schema.Type.STRING), "false")
+        val filter2 = new ColumnValueEqualsRowFilter("family", "column1", filterString2)
+        val data2: DList[EntityRow] = fromRequest(table2, request, filter=Some(filter2))
+        val values2 = data2.map(_.family[String :: Int :: HNil]("column1", "column2"))
+        values2.run.map(_.tupled._2).sorted must_== Vector(2, 4).sorted
+      } finally {
+        table2.release()
+        kiji2.release()
+      }
+    }
+
+    eg := { implicit sc: SC =>
+      onTable("table", "twoColumns.json") {
+        put("1", "family", "column1", "true")  >>
+        put("2", "family", "column1", "false") >>
+        put("3", "family", "column1", "true")  >>
+        put("4", "family", "column1", "false")  >>
+        put("1", "family", "column2", 1) >>
+        put("2", "family", "column2", 2) >>
+        put("3", "family", "column2", 3) >>
+        put("4", "family", "column2", 4) >>
+        get(true must_== true)
+      }
+
+      val uri = KijiURI.newBuilder(sc.configuration.get(KIJI_TEST_URI)).build
+      val request: KijiDataRequest = KijiDataRequest.builder.
+        addColumns(ColumnsDef.create.add("family", "column1").add("family", "column2")).build
+
+      val kiji1: Kiji = Kiji.Factory.open(uri)
+      val table1: KijiTable = kiji1.openTable("table")
+
+      try {
+        val filterString1 = new DecodedCell[String](Schema.create(Schema.Type.STRING), "false")
+        val filter1 = new ColumnValueEqualsRowFilter("family", "column1", filterString1)
+        val data1: DList[EntityRow] = fromRequest(table1, request, filter=Some(filter1))
+        val values1 = data1.map(_.family[String :: Int :: HNil]("column1", "column2"))
+        values1.run.map(_.tupled._1).sorted must_== Vector("false", "false").sorted
+      } finally {
+        table1.release()
+        kiji1.release()
+      }
+
+      val kiji2: Kiji = Kiji.Factory.open(uri)
+      val table2: KijiTable = kiji2.openTable("table")
+
+      try {
+        val filterString2 = new DecodedCell[String](Schema.create(Schema.Type.STRING), "false")
+        val filter2 = new ColumnValueEqualsRowFilter("family", "column1", filterString2)
+        val data2: DList[EntityRow] = fromRequest(table2, request, filter=Some(filter2))
+        val values2 = data2.map(_.family[String :: Int :: HNil]("column1", "column2"))
+        values2.run.map(_.tupled._2).sorted must_== Vector(2, 4).sorted
+      } finally {
+        table2.release()
+        kiji2.release()
+      }
+    }
   }
 
   "use a HFile as a sink" - new group with KijiCommands {
@@ -132,6 +226,5 @@ Sinks
       }.pendingUntilFixed
     }
   }
-
 }
 

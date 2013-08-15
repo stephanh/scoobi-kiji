@@ -77,7 +77,7 @@ object build extends Build {
 
   lazy val testingSettings: Seq[Settings] = Seq(
     // run each test in its own jvm
-    fork in Test := true,
+    fork in Test := false,
     javaOptions in Test ++= Seq("-Xmx1g")
   )
 
